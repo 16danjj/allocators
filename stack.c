@@ -10,6 +10,7 @@ void stack_init(Stack *s, void *backing_buffer, size_t backing_buffer_length) {
     s->buf = (unsigned char *)backing_buffer;
     s->buf_len = backing_buffer_length;
     s->curr_offset = 0;
+    s->prev_offset = 0;
 }
 
 size_t calc_padding_with_header(uintptr_t ptr, uintptr_t alignment, size_t header_size) {
@@ -56,12 +57,15 @@ void *stack_alloc_align(Stack *s, size_t size, size_t alignment) {
     if (s->curr_offset + padding + size > s->buf_len) { 
         return NULL;
     }
+    
+    s->prev_offset = s->curr_offset; 
 
     s->curr_offset += padding;
     new_addr = curr_addr + padding;
 
     header = (Header *)(new_addr - sizeof(Header));
     header->padding = padding;
+    header->prev_offset = s->prev_offset; 
 
     s->curr_offset += size;
     return memset((void *)new_addr, 0, size);
@@ -91,8 +95,14 @@ void stack_free(Stack *s, void *ptr) {
         }
     
         Header *header = (Header *)(curr_addr - sizeof(Header));
+
+        if (curr_addr - header->padding - start != header->prev_offset) {
+            assert(0 && "Ensure LIFO");
+            return;
+        }
     
         s->curr_offset = curr_addr - header->padding - start;
+        s->prev_offset = header->prev_offset; // s->prev_offset breaks, but doesn't break implementation
     }
 }
 
